@@ -54,7 +54,6 @@
 #define BLUE_RED_LED_PORT PORTB
 #define GREEN_LED_PORT PORTE
 #define BLUE_LED_PIN 21
-#define RED_LED_PIN 22
 #define GREEN_LED_PIN 26
 
 SemaphoreHandle_t Blue_semaphore;
@@ -84,11 +83,64 @@ int main(void) {
   	/* Init FSL debug console. */
     BOARD_InitDebugConsole();
 
+    //Enabling the clock for the LED and Switches ports.
+    CLOCK_EnableClock(kCLOCK_PortA);
+    CLOCK_EnableClock(kCLOCK_PortB);
+    CLOCK_EnableClock(kCLOCK_PortC);
+    CLOCK_EnableClock(kCLOCK_PortE);
+
+    //Configuration for the Leds.
+    port_pin_config_t config_led =
+    { kPORT_PullDisable, kPORT_SlowSlewRate, kPORT_PassiveFilterDisable,
+            kPORT_OpenDrainDisable, kPORT_LowDriveStrength, kPORT_MuxAsGpio,
+            kPORT_UnlockRegister, };
+
+    //Gives the Port/Pin configuration to the blue and green pin respectively.
+    PORT_SetPinConfig(BLUE_RED_LED_PORT, BLUE_LED_PIN, &config_led);
+    PORT_SetPinConfig(GREEN_LED_PORT, GREEN_LED_PIN, &config_led);
+
+    //Configuration for the switches.
+    port_pin_config_t config_switch =
+    { kPORT_PullDisable, kPORT_SlowSlewRate, kPORT_PassiveFilterDisable,
+            kPORT_OpenDrainDisable, kPORT_LowDriveStrength, kPORT_MuxAsGpio,
+            kPORT_UnlockRegister};
+
+    //Gives the Port/Pin configuration for the SW2 and SW3 respectively.
+    PORT_SetPinConfig(SW2_PORT, SW2_PIN, &config_switch);
+    PORT_SetPinConfig(SW3_PORT, SW3_PIN, &config_switch);
+
+    //Sets the interrupt on falling edge of the switches.
+    PORT_SetPinInterruptConfig(SW2_PORT, SW2_PIN, kPORT_InterruptFallingEdge);
+    PORT_SetPinInterruptConfig(SW3_PORT, SW3_PIN, kPORT_InterruptFallingEdge);
+
+    //Gpio configuration as output for the leds.
+    gpio_pin_config_t led_config_gpio =
+    { kGPIO_DigitalOutput, 1 };
+
+    //Sets the pins as output for the blue and green leds.
+    GPIO_PinInit(GPIOB, BLUE_LED_PIN, &led_config_gpio);
+    GPIO_PinInit(GPIOE, GREEN_LED_PIN, &led_config_gpio);
+
+    //Gpio configuration as input for the switches.
+    gpio_pin_config_t switch_config_gpio =
+    { kGPIO_DigitalInput, 1 };
+
+    //Sets the pins as input for the switches
+    GPIO_PinInit(GPIOA, SW3_PIN, &switch_config_gpio);
+    GPIO_PinInit(GPIOC, SW2_PIN, &switch_config_gpio);
+
+    //enables the interrupts from the ports
+    NVIC_EnableIRQ(PORTA_IRQn);
+    NVIC_EnableIRQ(PORTC_IRQn);
+
+    //makes the semaphore used for the blue led a binary semaphore
     Blue_semaphore = xSemaphoreCreateBinary();
+    //makes the semaphore used for the green led a counting semaphore
     Green_semaphore = xSemaphoreCreateCounting(SEMAPHORE_MAX, SEMAPHORE_COUNTER);
 
-    xTaskCreate(task_blue, "tasK1", 110, NULL, configMAX_PRIORITIES-1, NULL);
-    xTaskCreate(task_green, "tasK2", 110, NULL, configMAX_PRIORITIES-1, NULL);
+    //creation of both the blue and green led tasks
+    xTaskCreate(task_blue, "tasKB", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, NULL);
+    xTaskCreate(task_green, "tasKG", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, NULL);
     vTaskStartScheduler();
 
     return 0 ;
