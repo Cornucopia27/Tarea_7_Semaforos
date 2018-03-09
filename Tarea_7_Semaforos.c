@@ -39,11 +39,13 @@
 #include "clock_config.h"
 #include "MK64F12.h"
 #include "fsl_debug_console.h"
+#include "fsl_port.h"
+#include "fsl_gpio.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
 
-#define SEMAPHORE_COUNTER 0
+#define SEMAPHORE_START 0
 #define SEMAPHORE_MAX 10
 
 #define SW3_PORT PORTA
@@ -59,19 +61,46 @@
 SemaphoreHandle_t Blue_semaphore;
 SemaphoreHandle_t Green_semaphore;
 
-void task_blue(void * arg)
+void PORTA_IRQHandler()
+{
+    BaseType_t xHigherPriorityTaskWoken;
+    portCLEAR_INTERRUPT_MASK_FROM_ISR(1 << SW3_PIN);
+    xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(Blue_semaphore, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+void PORTC_IRQHandler()
+{
+    BaseType_t xHigherPriorityTaskWoken;
+    portCLEAR_INTERRUPT_MASK_FROM_ISR(1 << SW2_PIN);
+    xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(Green_semaphore, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+void task_blue()
 {
 	for(;;)
 	{
-
+	    xSemaphoreTake(Blue_semaphore, portMAX_DELAY);
+	    GPIO_TogglePinsOutput(GPIOB, 1 << BLUE_LED_PIN);
 	}
 }
 
-void task_green(void * arg)
+void task_green()
 {
 	for(;;)
 	{
-
+	    uint8_t counter = uxSemaphoreGetCount(Green_semaphore);
+	    if(SEMAPHORE_MAX == counter)
+	    {
+	        GPIO_TogglePinsOutput(GPIOE, 1 << GREEN_LED_PIN);
+	        while(counter != SEMAPHORE_START)
+	        {
+	            xSemaphoreTake(Green_semaphore, portMAX_DELAY);
+	        }
+	    }
 	}
 }
 
@@ -132,11 +161,13 @@ int main(void) {
     //enables the interrupts from the ports
     NVIC_EnableIRQ(PORTA_IRQn);
     NVIC_EnableIRQ(PORTC_IRQn);
+    NVIC_SetPriority(PORTA_IRQn, 4);
+    NVIC_SetPriority(PORTC_IRQn, 5);
 
     //makes the semaphore used for the blue led a binary semaphore
     Blue_semaphore = xSemaphoreCreateBinary();
     //makes the semaphore used for the green led a counting semaphore
-    Green_semaphore = xSemaphoreCreateCounting(SEMAPHORE_MAX, SEMAPHORE_COUNTER);
+    Green_semaphore = xSemaphoreCreateCounting(SEMAPHORE_MAX, SEMAPHORE_START);
 
     //creation of both the blue and green led tasks
     xTaskCreate(task_blue, "tasKB", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, NULL);
