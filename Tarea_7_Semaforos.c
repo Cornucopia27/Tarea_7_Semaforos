@@ -93,12 +93,14 @@ void task_green()
 	for(;;)
 	{
 	    uint8_t counter = (uint8_t) uxSemaphoreGetCount(Green_semaphore);
+	    vTaskDelay(100);
 	    if(SEMAPHORE_MAX == counter)
 	    {
 	        GPIO_TogglePinsOutput(GPIOE, 1 << GREEN_LED_PIN);
 	        while(counter != SEMAPHORE_START)
 	        {
 	            xSemaphoreTake(Green_semaphore, portMAX_DELAY);
+	            counter--;
 	        }
 	    }
 	}
